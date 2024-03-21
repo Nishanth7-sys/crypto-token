@@ -1,0 +1,63 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
+import "hardhat/console.sol";
+
+contract ItemRedeemToken is ERC20, Ownable, ERC20Burnable {
+    event LogMessage(string message);
+    event CryptoRedeemed(address indexed account, string cryptoName, uint256 num);
+
+    struct Crypto {
+        uint256 tokenCost;
+        uint256 num;
+    }
+
+    mapping(string => Crypto) public cryptos;
+    mapping(address => mapping(string => uint256)) public redeemedQuantities;
+    mapping(address => string) public redeemed;
+    constructor(
+        uint256 bitcoinCost,
+        uint256 solanaCost,
+        uint256 bitcoinNum,
+        uint256 solanaNum
+    ) ERC20("DEGEN", "DGN") Ownable(msg.sender) {
+        setCrypto("Bitcoin", bitcoinCost, bitcoinNum);
+        setCrypto("Solana", solanaCost, solanaNum);
+    }
+
+    function setCrypto(string memory cryptoName, uint256 cost, uint256 num) internal onlyOwner {
+        cryptos[cryptoName] = Crypto(cost, num);
+    }
+
+    function mint(address account, uint256 amount) external onlyOwner {
+        _mint(account, amount);
+    }
+
+    function transferTokens(address recipient, uint256 amount) external {
+        require(balanceOf(msg.sender) >= amount, "INSUFFICIENT FUNDS!!");
+        _transfer(msg.sender, recipient, amount);
+        emit Transfer(msg.sender, recipient, amount);
+    }
+
+    function redeemCrypto(string memory cryptoName, uint256 num) external {
+        Crypto storage crypto = cryptos[cryptoName];
+        require(crypto.tokenCost > 0, "Crypto does not exist");
+        require(balanceOf(msg.sender) >= crypto.tokenCost * num, "INSUFFICIENT FUNDS!!");
+        require(crypto.num >= num, "Insufficient crypto quantity available");
+
+        // Update state variables in a single transaction to save gas
+        _burn(msg.sender, crypto.tokenCost * num);
+        redeemed[msg.sender] = cryptoName; // Update with the latest redeemed crypto name
+        redeemedQuantities[msg.sender][cryptoName] += num;
+        emit CryptoRedeemed(msg.sender, cryptoName, num);
+    }
+
+    function burnTokens(uint256 amount) external {
+        require(balanceOf(msg.sender) >= amount, "INSUFFICIENT FUNDS!!");
+        _burn(msg.sender, amount);
+        emit LogMessage("Burned tokens");
+    }
+}
